@@ -1,8 +1,8 @@
 import streamlit as st
 
-st.set_page_config(page_title="Power Meter - Blueify Optimized", layout="wide")
+st.set_page_config(page_title="Power Meter - Amazfit & Blueify Fix", layout="wide")
 
-PASSWORD_SEGRETA = "123"
+PASSWORD_SEGRETA = "LaTuaPassword123"
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -17,7 +17,7 @@ if not st.session_state["authenticated"]:
             st.error("Password errata!")
     st.stop()
 
-st.title("🚴 Power Meter Live (Blueify Native Suite)")
+st.title("🚴 Power Meter Live (Blueify + Amazfit Support)")
 
 st.sidebar.header("⚙️ Parametri Bici & Atleta")
 peso_atleta = st.sidebar.number_input("Peso Ciclista (kg)", value=75.0)
@@ -44,7 +44,7 @@ with col2:
         </button>
         <br/><br/>
         <button id="connectBle" style="background-color: #008CBA; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; width: 100%;">
-            ❤️ 2. COLLEGA FASCIA CARDIO BLUETOOTH
+            ❤️ 2. COLLEGA CARDIO / AMAZFIT BLUETOOTH
         </button>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; text-align: center;">
@@ -115,7 +115,6 @@ with col2:
                 let now = Date.now();
                 let rawSpd = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
 
-                // Deadband zero sotto 1.8 km/h
                 if (rawSpd < 1.8) {{
                     smoothSpeed = 0;
                 }} else {{
@@ -140,7 +139,6 @@ with col2:
                 let effWind = (smoothSpeed > 0) ? (windSpeedKmh * Math.cos(angleRad)) : 0;
                 document.getElementById('effWindVal').innerText = (effWind > 0 ? "+" : "") + effWind.toFixed(1) + " km/h";
 
-                // Pendenza stabilizzata su 6m
                 if (smoothSpeed >= 1.8 && alt !== null && lastLat !== null && lastTime !== null) {{
                     let dt = (now - lastTime) / 1000.0;
                     let dist = getDistance(lastLat, lastLon, lat, lon);
@@ -170,12 +168,15 @@ with col2:
         }}
     }});
 
-    // 2. BLUETOOTH NATIVO BLUEIFY (FASCIA CARDIO)
+    // 2. BLUETOOTH APERTO PER AMAZFIT / FASCIA CARDIO
     document.getElementById('connectBle').addEventListener('click', async () => {{
         try {{
+            // Rimuove il filtro rigido per trovare l'Amazfit Bip
             const device = await navigator.bluetooth.requestDevice({{
-                filters: [{{ services: ['heart_rate'] }}]
+                acceptAllDevices: true,
+                optionalServices: ['heart_rate']
             }});
+            
             const server = await device.gatt.connect();
             const service = await server.getPrimaryService('heart_rate');
             const characteristic = await service.getCharacteristic('heart_rate_measurement');
@@ -186,7 +187,7 @@ with col2:
                 const bpm = value.getUint8(1);
                 document.getElementById('bpmVal').innerText = bpm + " BPM";
             }});
-            alert("Fascia Cardio Collegata!");
+            alert("Dispositivo Connesso: " + device.name);
         }} catch (error) {{
             alert("Errore Bluetooth: " + error);
         }}
