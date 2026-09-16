@@ -1,6 +1,6 @@
 import streamlit as st
 
-st.set_page_config(page_title="Power Meter - Amazfit & Blueify Fix", layout="wide")
+st.set_page_config(page_title="Power Meter Live - Pure GPS", layout="wide")
 
 PASSWORD_SEGRETA = "123"
 
@@ -17,7 +17,7 @@ if not st.session_state["authenticated"]:
             st.error("Password errata!")
     st.stop()
 
-st.title("🚴 Power Meter Live (Blueify + Amazfit Support)")
+st.title("🚴 Power Meter Live")
 
 st.sidebar.header("⚙️ Parametri Bici & Atleta")
 peso_atleta = st.sidebar.number_input("Peso Ciclista (kg)", value=75.0)
@@ -32,43 +32,47 @@ col1, col2 = st.columns([1, 1])
 with col1:
     st.subheader("📡 Mappa Cadence Live")
     if cadence_url:
-        st.components.v1.iframe(cadence_url, height=520, scrolling=True)
+        # Integrazione Iframe pulita senza bordi bianchi o zone nere sballate
+        st.markdown(
+            f"""
+            <div style="width: 100%; height: 500px; border-radius: 12px; overflow: hidden; background-color: #0e1117; border: 1px solid #262730;">
+                <iframe src="{cadence_url}" width="100%" height="100%" frameborder="0" style="border:0; display:block;" allowfullscreen></iframe>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
 with col2:
     st.subheader("⚡ Dati Sensori & Watt Live")
     
     st.components.v1.html(f"""
     <div style="font-family: system-ui, sans-serif; background-color: #0e1117; color: white; padding: 15px; border-radius: 10px;">
-        <button id="startSensors" style="background-color: #FF4B4B; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%;">
-            🚀 1. ATTIVA SENSORI GPS & METEO
-        </button>
-        <br/><br/>
-        <button id="connectBle" style="background-color: #008CBA; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; width: 100%;">
-            ❤️ 2. COLLEGA CARDIO / AMAZFIT BLUETOOTH
+        <button id="startSensors" style="background-color: #FF4B4B; color: white; padding: 14px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%;">
+            🚀 ATTIVA SENSORI (GPS + VENTO AUTO)
         </button>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; text-align: center;">
-            <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Velocità</small>
+            <div style="background-color: #262730; padding: 12px; border-radius: 8px;">
+                <small style="color: #aaa;">Velocità</small>
                 <h2 id="speedVal" style="margin: 5px 0; color: #4CAF50;">0.0 km/h</h2>
             </div>
-            <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Pendenza</small>
+            <div style="background-color: #262730; padding: 12px; border-radius: 8px;">
+                <small style="color: #aaa;">Pendenza</small>
                 <h2 id="gradeVal" style="margin: 5px 0; color: #FF9800;">0.0 %</h2>
             </div>
-            <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Battito Cardio</small>
-                <h2 id="bpmVal" style="margin: 5px 0; color: #E91E63;">-- BPM</h2>
+            <div style="background-color: #262730; padding: 12px; border-radius: 8px;">
+                <small style="color: #aaa;">Vento Meteo</small>
+                <h3 id="windVal" style="margin: 5px 0; color: #00BCD4;">-- km/h</h3>
             </div>
-            <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Vento Effettivo</small>
-                <h2 id="effWindVal" style="margin: 5px 0; color: #00BCD4;">0.0 km/h</h2>
+            <div style="background-color: #262730; padding: 12px; border-radius: 8px;">
+                <small style="color: #aaa;">Vento Effettivo</small>
+                <h3 id="effWindVal" style="margin: 5px 0; color: #E91E63;">0.0 km/h</h3>
             </div>
         </div>
 
         <div style="background-color: #1e222a; border: 2px solid #FF4B4B; padding: 15px; border-radius: 10px; margin-top: 15px; text-align: center;">
-            <span style="font-size: 14px; text-transform: uppercase; color: #aaa;">⚡ WATT STIMATI SUI PEDALI</span>
-            <h1 id="wattVal" style="font-size: 48px; margin: 5px 0; color: #FFFFFF;">0 W</h1>
+            <span style="font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #aaa;">⚡ WATT STIMATI SUI PEDALI</span>
+            <h1 id="wattVal" style="font-size: 52px; margin: 5px 0; color: #FFFFFF;">0 W</h1>
         </div>
     </div>
 
@@ -80,7 +84,6 @@ with col2:
     let smoothSpeed = 0, smoothGrade = 0, smoothWatt = 0;
     let windSpeedKmh = 0, windDirDeg = 0, bikeHeadingDeg = 0;
 
-    // METEO API
     async function fetchWindData(lat, lon) {{
         try {{
             const url = `https://api.open-meteo.com/v1/forecast?latitude=${{lat}}&longitude=${{lon}}&current_weather=true`;
@@ -89,6 +92,7 @@ with col2:
             if (data.current_weather) {{
                 windSpeedKmh = data.current_weather.windspeed;
                 windDirDeg = data.current_weather.winddirection;
+                document.getElementById('windVal').innerText = windSpeedKmh.toFixed(1) + " km/h";
             }}
         }} catch(e) {{ console.log("Meteo Err:", e); }}
     }}
@@ -108,7 +112,6 @@ with col2:
         return Math.max(0, Math.round((pGravita + pAria + pRotolamento) / eta));
     }}
 
-    // 1. SENSORI GPS & METEO
     document.getElementById('startSensors').addEventListener('click', () => {{
         if ("geolocation" in navigator) {{
             navigator.geolocation.watchPosition((pos) => {{
@@ -168,31 +171,6 @@ with col2:
         }}
     }});
 
-    // 2. BLUETOOTH APERTO PER AMAZFIT / FASCIA CARDIO
-    document.getElementById('connectBle').addEventListener('click', async () => {{
-        try {{
-            // Rimuove il filtro rigido per trovare l'Amazfit Bip
-            const device = await navigator.bluetooth.requestDevice({{
-                acceptAllDevices: true,
-                optionalServices: ['heart_rate']
-            }});
-            
-            const server = await device.gatt.connect();
-            const service = await server.getPrimaryService('heart_rate');
-            const characteristic = await service.getCharacteristic('heart_rate_measurement');
-            
-            await characteristic.startNotifications();
-            characteristic.addEventListener('characteristicvaluechanged', (e) => {{
-                const value = e.target.value;
-                const bpm = value.getUint8(1);
-                document.getElementById('bpmVal').innerText = bpm + " BPM";
-            }});
-            alert("Dispositivo Connesso: " + device.name);
-        }} catch (error) {{
-            alert("Errore Bluetooth: " + error);
-        }}
-    }});
-
     function getDistance(lat1, lon1, lat2, lon2) {{
         const R = 6371000;
         const dLat = (lat2-lat1) * Math.PI / 180;
@@ -201,4 +179,4 @@ with col2:
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }}
     </script>
-    """, height=440)
+    """, height=360)
