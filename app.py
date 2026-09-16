@@ -1,8 +1,8 @@
 import streamlit as st
 
-st.set_page_config(page_title="Power Meter - Auto Wind & GPS", layout="wide")
+st.set_page_config(page_title="Power Meter - Stable Grade", layout="wide")
 
-PASSWORD_SEGRETA = "123"
+PASSWORD_SEGRETA = "LaTuaPassword123"
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -17,7 +17,7 @@ if not st.session_state["authenticated"]:
             st.error("Password errata!")
     st.stop()
 
-st.title("🚴 Power Meter Live (Vento & GPS Auto)")
+st.title("🚴 Power Meter Live (Pendenza Stabilizzata)")
 
 st.sidebar.header("⚙️ Parametri Bici & Atleta")
 peso_atleta = st.sidebar.number_input("Peso Ciclista (kg)", value=75.0)
@@ -35,12 +35,12 @@ with col1:
         st.components.v1.iframe(cadence_url, height=520, scrolling=True)
 
 with col2:
-    st.subheader("⚡ Watt con Vento e GPS in Tempo Reale")
+    st.subheader("⚡ Watt & Pendenza Fluida")
     
     st.components.v1.html(f"""
     <div style="font-family: system-ui, sans-serif; background-color: #0e1117; color: white; padding: 15px; border-radius: 10px;">
         <button id="startSensors" style="background-color: #FF4B4B; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%;">
-            🚀 ATTIVA SENSORI (GPS + VENTO AUTO)
+            🚀 ATTIVA SENSORI (GPS STABILIZZATO)
         </button>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; text-align: center;">
@@ -49,15 +49,15 @@ with col2:
                 <h2 id="speedVal" style="margin: 5px 0; color: #4CAF50;">0.0 km/h</h2>
             </div>
             <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Pendenza</small>
+                <small>Pendenza Filtata</small>
                 <h2 id="gradeVal" style="margin: 5px 0; color: #FF9800;">0.0 %</h2>
             </div>
             <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Vento Meteo Live</small>
+                <small>Vento Meteo</small>
                 <h3 id="windVal" style="margin: 5px 0; color: #00BCD4;">-- km/h</h3>
             </div>
             <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Vento Effettivo Bici</small>
+                <small>Vento Effettivo</small>
                 <h3 id="effWindVal" style="margin: 5px 0; color: #E91E63;">0.0 km/h</h3>
             </div>
         </div>
@@ -76,7 +76,9 @@ with col2:
     let currentSpeed = 0, currentGrade = 0;
     let windSpeedKmh = 0, windDirDeg = 0, bikeHeadingDeg = 0;
 
-    // OTTIENI VENTO REALE DA API METEO
+    // Buffer per smussare la pendenza (Media mobile di 5 letture)
+    let gradeHistory = [];
+
     async function fetchWindData(lat, lon) {{
         try {{
             const url = `https://api.open-meteo.com/v1/forecast?latitude=${{lat}}&longitude=${{lon}}&current_weather=true`;
@@ -87,7 +89,7 @@ with col2:
                 windDirDeg = data.current_weather.winddirection;
                 document.getElementById('windVal').innerText = windSpeedKmh.toFixed(1) + " km/h";
             }}
-        }} catch(e) {{ console.log("Errore Meteo API:", e); }}
+        }} catch(e) {{ console.log("Errore Meteo:", e); }}
     }}
 
     function calcolaWatt(vKmh, gradePct, effWindKmh) {{
@@ -109,41 +111,52 @@ with col2:
         if ("geolocation" in navigator) {{
             navigator.geolocation.watchPosition((pos) => {{
                 let spd = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
-                currentSpeed = spd < 0.5 ? 0 : spd;
+                currentSpeed = spd < 0.8 ? 0 : spd;
                 document.getElementById('speedVal').innerText = currentSpeed.toFixed(1) + " km/h";
 
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
+                const alt = pos.coords.altitude;
 
-                // Chiama API vento ogni volta che ci si sposta
                 if (!lastLat || getDistance(lastLat, lastLon, lat, lon) > 500) {{
                     fetchWindData(lat, lon);
                 }}
 
-                // Direzione GPS della bici
                 if (pos.coords.heading !== null && !isNaN(pos.coords.heading)) {{
                     bikeHeadingDeg = pos.coords.heading;
                 }}
 
-                // Calcolo Vento Effettivo (Contro o A favore)
                 let angleRad = (windDirDeg - bikeHeadingDeg) * (Math.PI / 180);
                 let effWind = windSpeedKmh * Math.cos(angleRad);
                 document.getElementById('effWindVal').innerText = (effWind > 0 ? "+" : "") + effWind.toFixed(1) + " km/h";
 
-                // Pendenza
-                if (pos.coords.altitude !== null && lastLat !== null) {{
+                // --- CALCOLO PENDENZA SMUSSATA (SMOOTHED) ---
+                if (alt !== null && lastLat !== null) {{
                     let dist = getDistance(lastLat, lastLon, lat, lon);
-                    let altDiff = pos.coords.altitude - lastAlt;
-                    if (dist > 2.5) {{
-                        currentGrade = Math.min(30, Math.max(-25, (altDiff / dist) * 100));
-                        document.getElementById('gradeVal').innerText = currentGrade.toFixed(1) + " %";
-                        lastLat = lat; lastLon = lon; lastAlt = pos.coords.altitude;
+                    let altDiff = alt - lastAlt;
+
+                    // Richiede almeno 12 metri di spostamento per evitare i saltelli del GPS
+                    if (dist >= 12.0) {{
+                        let rawGrade = (altDiff / dist) * 100;
+                        
+                        // Ignora valori assurdi dovuti a sbalzi di segnale
+                        if (rawGrade <= 25.0 && rawGrade >= -20.0) {{
+                            gradeHistory.push(rawGrade);
+                            if (gradeHistory.length > 5) gradeHistory.shift(); // Mantiene le ultime 5 misurazioni
+
+                            // Calcola la media mobile
+                            let sum = gradeHistory.reduce((a, b) => a + b, 0);
+                            currentGrade = sum / gradeHistory.length;
+                        }}
+                        
+                        lastLat = lat; lastLon = lon; lastAlt = alt;
                     }}
-                }} else if (pos.coords.altitude !== null) {{
-                    lastLat = lat; lastLon = lon; lastAlt = pos.coords.altitude;
+                }} else if (alt !== null) {{
+                    lastLat = lat; lastLon = lon; lastAlt = alt;
                 }}
 
-                // Calcolo Watt Finale
+                document.getElementById('gradeVal').innerText = currentGrade.toFixed(1) + " %";
+
                 const watt = calcolaWatt(currentSpeed, currentGrade, effWind);
                 document.getElementById('wattVal').innerText = watt + " W";
 
