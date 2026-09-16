@@ -3,7 +3,7 @@ import math
 
 st.set_page_config(page_title="Cycling Power Meter Live", layout="wide")
 
-PASSWORD_SEGRETA = "LaTuaPassword123"
+PASSWORD_SEGRETA = "123"
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
