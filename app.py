@@ -1,6 +1,6 @@
 import streamlit as st
 
-st.set_page_config(page_title="Power Meter Live - Pure GPS", layout="wide")
+st.set_page_config(page_title="Power Meter Live", layout="wide")
 
 PASSWORD_SEGRETA = "123"
 
@@ -32,10 +32,9 @@ col1, col2 = st.columns([1, 1])
 with col1:
     st.subheader("📡 Mappa Cadence Live")
     if cadence_url:
-        # Integrazione Iframe pulita senza bordi bianchi o zone nere sballate
         st.markdown(
             f"""
-            <div style="width: 100%; height: 500px; border-radius: 12px; overflow: hidden; background-color: #0e1117; border: 1px solid #262730;">
+            <div style="width: 100%; height: 480px; border-radius: 12px; overflow: hidden; background-color: #0e1117; border: 1px solid #262730;">
                 <iframe src="{cadence_url}" width="100%" height="100%" frameborder="0" style="border:0; display:block;" allowfullscreen></iframe>
             </div>
             """,
@@ -43,37 +42,41 @@ with col1:
         )
 
 with col2:
-    st.subheader("⚡ Dati Sensori & Watt Live")
+    st.subheader("⚡ Sensori & Potenza Istantanea")
     
     st.components.v1.html(f"""
-    <div style="font-family: system-ui, sans-serif; background-color: #0e1117; color: white; padding: 15px; border-radius: 10px;">
-        <button id="startSensors" style="background-color: #FF4B4B; color: white; padding: 14px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%;">
-            🚀 ATTIVA SENSORI (GPS + VENTO AUTO)
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0e1117; color: white; padding: 12px; border-radius: 12px; box-sizing: border-box;">
+        
+        <button id="startSensors" style="background-color: #FF4B4B; color: white; padding: 14px; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+            🚀 ATTIVA SENSORI GPS & METEO
         </button>
         
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; text-align: center;">
-            <div style="background-color: #262730; padding: 12px; border-radius: 8px;">
-                <small style="color: #aaa;">Velocità</small>
-                <h2 id="speedVal" style="margin: 5px 0; color: #4CAF50;">0.0 km/h</h2>
-            </div>
-            <div style="background-color: #262730; padding: 12px; border-radius: 8px;">
-                <small style="color: #aaa;">Pendenza</small>
-                <h2 id="gradeVal" style="margin: 5px 0; color: #FF9800;">0.0 %</h2>
-            </div>
-            <div style="background-color: #262730; padding: 12px; border-radius: 8px;">
-                <small style="color: #aaa;">Vento Meteo</small>
-                <h3 id="windVal" style="margin: 5px 0; color: #00BCD4;">-- km/h</h3>
-            </div>
-            <div style="background-color: #262730; padding: 12px; border-radius: 8px;">
-                <small style="color: #aaa;">Vento Effettivo</small>
-                <h3 id="effWindVal" style="margin: 5px 0; color: #E91E63;">0.0 km/h</h3>
-            </div>
+        <!-- DISPLAY PRINCIPALE WATT -->
+        <div style="background: linear-gradient(145deg, #1e222a, #14171d); border: 2px solid #00E676; padding: 15px; border-radius: 12px; margin-top: 15px; text-align: center; box-shadow: 0 4px 12px rgba(0,230,118,0.15);">
+            <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #00E676; font-weight: bold;">⚡ WATT STIMATI SUI PEDALI</div>
+            <div id="wattVal" style="font-size: 56px; font-weight: 800; line-height: 1.1; margin: 8px 0; color: #FFFFFF; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">0 W</div>
         </div>
 
-        <div style="background-color: #1e222a; border: 2px solid #FF4B4B; padding: 15px; border-radius: 10px; margin-top: 15px; text-align: center;">
-            <span style="font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #aaa;">⚡ WATT STIMATI SUI PEDALI</span>
-            <h1 id="wattVal" style="font-size: 52px; margin: 5px 0; color: #FFFFFF;">0 W</h1>
+        <!-- GRIGLIA TELEMETRIA -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; text-align: center;">
+            <div style="background-color: #1e222a; padding: 10px; border-radius: 8px; border: 1px solid #262730;">
+                <div style="font-size: 11px; color: #888; text-transform: uppercase;">Velocità</div>
+                <div id="speedVal" style="font-size: 22px; font-weight: bold; margin-top: 4px; color: #4CAF50;">0.0 km/h</div>
+            </div>
+            <div style="background-color: #1e222a; padding: 10px; border-radius: 8px; border: 1px solid #262730;">
+                <div style="font-size: 11px; color: #888; text-transform: uppercase;">Pendenza</div>
+                <div id="gradeVal" style="font-size: 22px; font-weight: bold; margin-top: 4px; color: #FF9800;">0.0 %</div>
+            </div>
+            <div style="background-color: #1e222a; padding: 10px; border-radius: 8px; border: 1px solid #262730;">
+                <div style="font-size: 11px; color: #888; text-transform: uppercase;">Vento Meteo</div>
+                <div id="windVal" style="font-size: 18px; font-weight: bold; margin-top: 4px; color: #00BCD4;">-- km/h</div>
+            </div>
+            <div style="background-color: #1e222a; padding: 10px; border-radius: 8px; border: 1px solid #262730;">
+                <div style="font-size: 11px; color: #888; text-transform: uppercase;">Vento Effettivo</div>
+                <div id="effWindVal" style="font-size: 18px; font-weight: bold; margin-top: 4px; color: #E91E63;">0.0 km/h</div>
+            </div>
         </div>
+        
     </div>
 
     <script>
@@ -179,4 +182,4 @@ with col2:
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }}
     </script>
-    """, height=360)
+    """, height=440)
