@@ -1,8 +1,8 @@
 import streamlit as st
 
-st.set_page_config(page_title="Power Meter - Stable Grade", layout="wide")
+st.set_page_config(page_title="Power Meter - Ultra Smooth", layout="wide")
 
-PASSWORD_SEGRETA = "123"
+PASSWORD_SEGRETA = "LaTuaPassword123"
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -17,7 +17,7 @@ if not st.session_state["authenticated"]:
             st.error("Password errata!")
     st.stop()
 
-st.title("🚴 Power Meter Live (Pendenza Stabilizzata)")
+st.title("🚴 Power Meter Live (Algoritmo Fluido)")
 
 st.sidebar.header("⚙️ Parametri Bici & Atleta")
 peso_atleta = st.sidebar.number_input("Peso Ciclista (kg)", value=75.0)
@@ -35,21 +35,21 @@ with col1:
         st.components.v1.iframe(cadence_url, height=520, scrolling=True)
 
 with col2:
-    st.subheader("⚡ Watt & Pendenza Fluida")
+    st.subheader("⚡ Watt e Pendenza Stabili")
     
     st.components.v1.html(f"""
     <div style="font-family: system-ui, sans-serif; background-color: #0e1117; color: white; padding: 15px; border-radius: 10px;">
         <button id="startSensors" style="background-color: #FF4B4B; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%;">
-            🚀 ATTIVA SENSORI (GPS STABILIZZATO)
+            🚀 ATTIVA SENSORI (FILTRO NATIVO STABILIZZATO)
         </button>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; text-align: center;">
             <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Velocità (GPS)</small>
+                <small>Velocità</small>
                 <h2 id="speedVal" style="margin: 5px 0; color: #4CAF50;">0.0 km/h</h2>
             </div>
             <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Pendenza Filtata</small>
+                <small>Pendenza Stabile</small>
                 <h2 id="gradeVal" style="margin: 5px 0; color: #FF9800;">0.0 %</h2>
             </div>
             <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
@@ -72,12 +72,9 @@ with col2:
     const pesoTotale = {peso_totale};
     const cda = {cda};
     
-    let lastLat = null, lastLon = null, lastAlt = null;
-    let currentSpeed = 0, currentGrade = 0;
+    let lastLat = null, lastLon = null, lastAlt = null, lastTime = null;
+    let currentSpeed = 0, filteredGrade = 0, smoothedWatt = 0;
     let windSpeedKmh = 0, windDirDeg = 0, bikeHeadingDeg = 0;
-
-    // Buffer per smussare la pendenza (Media mobile di 5 letture)
-    let gradeHistory = [];
 
     async function fetchWindData(lat, lon) {{
         try {{
@@ -89,7 +86,7 @@ with col2:
                 windDirDeg = data.current_weather.winddirection;
                 document.getElementById('windVal').innerText = windSpeedKmh.toFixed(1) + " km/h";
             }}
-        }} catch(e) {{ console.log("Errore Meteo:", e); }}
+        }} catch(e) {{ console.log("Meteo Err:", e); }}
     }}
 
     function calcolaWatt(vKmh, gradePct, effWindKmh) {{
@@ -110,6 +107,7 @@ with col2:
     document.getElementById('startSensors').addEventListener('click', () => {{
         if ("geolocation" in navigator) {{
             navigator.geolocation.watchPosition((pos) => {{
+                let now = Date.now();
                 let spd = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
                 currentSpeed = spd < 0.8 ? 0 : spd;
                 document.getElementById('speedVal').innerText = currentSpeed.toFixed(1) + " km/h";
@@ -130,35 +128,31 @@ with col2:
                 let effWind = windSpeedKmh * Math.cos(angleRad);
                 document.getElementById('effWindVal').innerText = (effWind > 0 ? "+" : "") + effWind.toFixed(1) + " km/h";
 
-                // --- CALCOLO PENDENZA SMUSSATA (SMOOTHED) ---
-                if (alt !== null && lastLat !== null) {{
+                // FILTRO TEMPORALE ESPONENZIALE PER LA PENDENZA
+                if (alt !== null && lastLat !== null && lastTime !== null) {{
+                    let dt = (now - lastTime) / 1000.0; // tempo in secondi
                     let dist = getDistance(lastLat, lastLon, lat, lon);
-                    let altDiff = alt - lastAlt;
 
-                    // Richiede almeno 12 metri di spostamento per evitare i saltelli del GPS
-                    if (dist >= 12.0) {{
-                        let rawGrade = (altDiff / dist) * 100;
-                        
-                        // Ignora valori assurdi dovuti a sbalzi di segnale
+                    // Aggiorna solo se sono passati almeno 2 secondi e 5 metri per ridurre le oscillazioni
+                    if (dt >= 2.0 && dist >= 5.0) {{
+                        let rawGrade = ((alt - lastAlt) / dist) * 100;
                         if (rawGrade <= 25.0 && rawGrade >= -20.0) {{
-                            gradeHistory.push(rawGrade);
-                            if (gradeHistory.length > 5) gradeHistory.shift(); // Mantiene le ultime 5 misurazioni
-
-                            // Calcola la media mobile
-                            let sum = gradeHistory.reduce((a, b) => a + b, 0);
-                            currentGrade = sum / gradeHistory.length;
+                            // Smussamento Esponenziale: 20% dato nuovo, 80% dato precedente
+                            filteredGrade = (filteredGrade * 0.8) + (rawGrade * 0.2);
                         }}
-                        
-                        lastLat = lat; lastLon = lon; lastAlt = alt;
+                        lastLat = lat; lastLon = lon; lastAlt = alt; lastTime = now;
                     }}
                 }} else if (alt !== null) {{
-                    lastLat = lat; lastLon = lon; lastAlt = alt;
+                    lastLat = lat; lastLon = lon; lastAlt = alt; lastTime = now;
                 }}
 
-                document.getElementById('gradeVal').innerText = currentGrade.toFixed(1) + " %";
+                document.getElementById('gradeVal').innerText = filteredGrade.toFixed(1) + " %";
 
-                const watt = calcolaWatt(currentSpeed, currentGrade, effWind);
-                document.getElementById('wattVal').innerText = watt + " W";
+                // SMOOTHING WATT (Media 3s)
+                let instantWatt = calcolaWatt(currentSpeed, filteredGrade, effWind);
+                smoothedWatt = Math.round((smoothedWatt * 0.7) + (instantWatt * 0.3));
+
+                document.getElementById('wattVal').innerText = smoothedWatt + " W";
 
             }}, (err) => alert("GPS: " + err.message), {{ enableHighAccuracy: true }});
         }}
