@@ -2,7 +2,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Power Meter - Blueify Optimized", layout="wide")
 
-PASSWORD_SEGRETA = "LaTuaPassword123"
+PASSWORD_SEGRETA = "123"
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
