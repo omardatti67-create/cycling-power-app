@@ -1,8 +1,8 @@
 import streamlit as st
 
-st.set_page_config(page_title="Power Meter - Ultra Smooth", layout="wide")
+st.set_page_config(page_title="Power Meter - Blueify Optimized", layout="wide")
 
-PASSWORD_SEGRETA = "123"
+PASSWORD_SEGRETA = "LaTuaPassword123"
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -17,7 +17,7 @@ if not st.session_state["authenticated"]:
             st.error("Password errata!")
     st.stop()
 
-st.title("🚴 Power Meter Live (Algoritmo Fluido)")
+st.title("🚴 Power Meter Live (Blueify Native Suite)")
 
 st.sidebar.header("⚙️ Parametri Bici & Atleta")
 peso_atleta = st.sidebar.number_input("Peso Ciclista (kg)", value=75.0)
@@ -35,12 +35,16 @@ with col1:
         st.components.v1.iframe(cadence_url, height=520, scrolling=True)
 
 with col2:
-    st.subheader("⚡ Watt e Pendenza Stabili")
+    st.subheader("⚡ Dati Sensori & Watt Live")
     
     st.components.v1.html(f"""
     <div style="font-family: system-ui, sans-serif; background-color: #0e1117; color: white; padding: 15px; border-radius: 10px;">
         <button id="startSensors" style="background-color: #FF4B4B; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%;">
-            🚀 ATTIVA SENSORI (FILTRO NATIVO STABILIZZATO)
+            🚀 1. ATTIVA SENSORI GPS & METEO
+        </button>
+        <br/><br/>
+        <button id="connectBle" style="background-color: #008CBA; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; width: 100%;">
+            ❤️ 2. COLLEGA FASCIA CARDIO BLUETOOTH
         </button>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; text-align: center;">
@@ -49,16 +53,16 @@ with col2:
                 <h2 id="speedVal" style="margin: 5px 0; color: #4CAF50;">0.0 km/h</h2>
             </div>
             <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Pendenza Stabile</small>
+                <small>Pendenza</small>
                 <h2 id="gradeVal" style="margin: 5px 0; color: #FF9800;">0.0 %</h2>
             </div>
             <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
-                <small>Vento Meteo</small>
-                <h3 id="windVal" style="margin: 5px 0; color: #00BCD4;">-- km/h</h3>
+                <small>Battito Cardio</small>
+                <h2 id="bpmVal" style="margin: 5px 0; color: #E91E63;">-- BPM</h2>
             </div>
             <div style="background-color: #262730; padding: 10px; border-radius: 8px;">
                 <small>Vento Effettivo</small>
-                <h3 id="effWindVal" style="margin: 5px 0; color: #E91E63;">0.0 km/h</h3>
+                <h2 id="effWindVal" style="margin: 5px 0; color: #00BCD4;">0.0 km/h</h2>
             </div>
         </div>
 
@@ -73,9 +77,10 @@ with col2:
     const cda = {cda};
     
     let lastLat = null, lastLon = null, lastAlt = null, lastTime = null;
-    let currentSpeed = 0, filteredGrade = 0, smoothedWatt = 0;
+    let smoothSpeed = 0, smoothGrade = 0, smoothWatt = 0;
     let windSpeedKmh = 0, windDirDeg = 0, bikeHeadingDeg = 0;
 
+    // METEO API
     async function fetchWindData(lat, lon) {{
         try {{
             const url = `https://api.open-meteo.com/v1/forecast?latitude=${{lat}}&longitude=${{lon}}&current_weather=true`;
@@ -84,13 +89,12 @@ with col2:
             if (data.current_weather) {{
                 windSpeedKmh = data.current_weather.windspeed;
                 windDirDeg = data.current_weather.winddirection;
-                document.getElementById('windVal').innerText = windSpeedKmh.toFixed(1) + " km/h";
             }}
         }} catch(e) {{ console.log("Meteo Err:", e); }}
     }}
 
     function calcolaWatt(vKmh, gradePct, effWindKmh) {{
-        if (vKmh <= 0.8) return 0;
+        if (vKmh < 1.8) return 0;
         
         const g = 9.81, rho = 1.225, eta = 0.95, crr = 0.004;
         const vMs = vKmh / 3.6;
@@ -104,13 +108,21 @@ with col2:
         return Math.max(0, Math.round((pGravita + pAria + pRotolamento) / eta));
     }}
 
+    // 1. SENSORI GPS & METEO
     document.getElementById('startSensors').addEventListener('click', () => {{
         if ("geolocation" in navigator) {{
             navigator.geolocation.watchPosition((pos) => {{
                 let now = Date.now();
-                let spd = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
-                currentSpeed = spd < 0.8 ? 0 : spd;
-                document.getElementById('speedVal').innerText = currentSpeed.toFixed(1) + " km/h";
+                let rawSpd = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
+
+                // Deadband zero sotto 1.8 km/h
+                if (rawSpd < 1.8) {{
+                    smoothSpeed = 0;
+                }} else {{
+                    smoothSpeed = (smoothSpeed * 0.6) + (rawSpd * 0.4);
+                }}
+
+                document.getElementById('speedVal').innerText = smoothSpeed.toFixed(1) + " km/h";
 
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
@@ -125,36 +137,58 @@ with col2:
                 }}
 
                 let angleRad = (windDirDeg - bikeHeadingDeg) * (Math.PI / 180);
-                let effWind = windSpeedKmh * Math.cos(angleRad);
+                let effWind = (smoothSpeed > 0) ? (windSpeedKmh * Math.cos(angleRad)) : 0;
                 document.getElementById('effWindVal').innerText = (effWind > 0 ? "+" : "") + effWind.toFixed(1) + " km/h";
 
-                // FILTRO TEMPORALE ESPONENZIALE PER LA PENDENZA
-                if (alt !== null && lastLat !== null && lastTime !== null) {{
-                    let dt = (now - lastTime) / 1000.0; // tempo in secondi
+                // Pendenza stabilizzata su 6m
+                if (smoothSpeed >= 1.8 && alt !== null && lastLat !== null && lastTime !== null) {{
+                    let dt = (now - lastTime) / 1000.0;
                     let dist = getDistance(lastLat, lastLon, lat, lon);
 
-                    // Aggiorna solo se sono passati almeno 2 secondi e 5 metri per ridurre le oscillazioni
-                    if (dt >= 2.0 && dist >= 5.0) {{
+                    if (dt >= 1.5 && dist >= 6.0) {{
                         let rawGrade = ((alt - lastAlt) / dist) * 100;
                         if (rawGrade <= 25.0 && rawGrade >= -20.0) {{
-                            // Smussamento Esponenziale: 20% dato nuovo, 80% dato precedente
-                            filteredGrade = (filteredGrade * 0.8) + (rawGrade * 0.2);
+                            smoothGrade = (smoothGrade * 0.75) + (rawGrade * 0.25);
                         }}
                         lastLat = lat; lastLon = lon; lastAlt = alt; lastTime = now;
                     }}
+                }} else if (smoothSpeed < 1.8) {{
+                    smoothGrade = 0;
+                    if (alt !== null) {{ lastLat = lat; lastLon = lon; lastAlt = alt; lastTime = now; }}
                 }} else if (alt !== null) {{
                     lastLat = lat; lastLon = lon; lastAlt = alt; lastTime = now;
                 }}
 
-                document.getElementById('gradeVal').innerText = filteredGrade.toFixed(1) + " %";
+                document.getElementById('gradeVal').innerText = smoothGrade.toFixed(1) + " %";
 
-                // SMOOTHING WATT (Media 3s)
-                let instantWatt = calcolaWatt(currentSpeed, filteredGrade, effWind);
-                smoothedWatt = Math.round((smoothedWatt * 0.7) + (instantWatt * 0.3));
+                let targetWatt = calcolaWatt(smoothSpeed, smoothGrade, effWind);
+                smoothWatt = Math.round((smoothWatt * 0.7) + (targetWatt * 0.3));
 
-                document.getElementById('wattVal').innerText = smoothedWatt + " W";
+                document.getElementById('wattVal').innerText = smoothWatt + " W";
 
-            }}, (err) => alert("GPS: " + err.message), {{ enableHighAccuracy: true }});
+            }}, (err) => alert("GPS Err: " + err.message), {{ enableHighAccuracy: true }});
+        }}
+    }});
+
+    // 2. BLUETOOTH NATIVO BLUEIFY (FASCIA CARDIO)
+    document.getElementById('connectBle').addEventListener('click', async () => {{
+        try {{
+            const device = await navigator.bluetooth.requestDevice({{
+                filters: [{{ services: ['heart_rate'] }}]
+            }});
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService('heart_rate');
+            const characteristic = await service.getCharacteristic('heart_rate_measurement');
+            
+            await characteristic.startNotifications();
+            characteristic.addEventListener('characteristicvaluechanged', (e) => {{
+                const value = e.target.value;
+                const bpm = value.getUint8(1);
+                document.getElementById('bpmVal').innerText = bpm + " BPM";
+            }});
+            alert("Fascia Cardio Collegata!");
+        }} catch (error) {{
+            alert("Errore Bluetooth: " + error);
         }}
     }});
 
@@ -166,4 +200,4 @@ with col2:
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }}
     </script>
-    """, height=420)
+    """, height=440)
