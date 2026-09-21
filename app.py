@@ -1,8 +1,8 @@
 import streamlit as st
 
-st.set_page_config(page_title="Power Meter Live", layout="wide")
+st.set_page_config(page_title="Power Meter - Cadence Grade Stability", layout="wide")
 
-PASSWORD_SEGRETA = "123"
+PASSWORD_SEGRETA = "LaTuaPassword123"
 
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
@@ -24,6 +24,11 @@ peso_atleta = st.sidebar.number_input("Peso Ciclista (kg)", value=75.0)
 peso_bici = st.sidebar.number_input("Peso Bici (kg)", value=11.0)
 peso_totale = peso_atleta + peso_bici
 cda = st.sidebar.slider("Aerodinamica (CdA)", 0.25, 0.45, 0.35)
+
+st.sidebar.header("🧪 Modalità Test (Simulazione Divano)")
+test_mode = st.sidebar.checkbox("Attiva Simulazione Manuale")
+sim_speed = st.sidebar.slider("Simula Velocità (km/h)", 0.0, 50.0, 25.0) if test_mode else 0.0
+sim_grade = st.sidebar.slider("Simula Pendenza (%)", -10.0, 20.0, 5.0) if test_mode else 0.0
 
 cadence_url = st.sidebar.text_input("Link Cadence Live:", value="https://livetracker.getcadence.app/BVsKx7593UzZ0X")
 
@@ -51,20 +56,18 @@ with col2:
             🚀 ATTIVA SENSORI GPS & METEO
         </button>
         
-        <!-- DISPLAY PRINCIPALE WATT -->
         <div style="background: linear-gradient(145deg, #1e222a, #14171d); border: 2px solid #00E676; padding: 15px; border-radius: 12px; margin-top: 15px; text-align: center; box-shadow: 0 4px 12px rgba(0,230,118,0.15);">
             <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #00E676; font-weight: bold;">⚡ WATT STIMATI SUI PEDALI</div>
-            <div id="wattVal" style="font-size: 56px; font-weight: 800; line-height: 1.1; margin: 8px 0; color: #FFFFFF; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">0 W</div>
+            <div id="wattVal" style="font-size: 56px; font-weight: 800; line-height: 1.1; margin: 8px 0; color: #FFFFFF;">0 W</div>
         </div>
 
-        <!-- GRIGLIA TELEMETRIA -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; text-align: center;">
             <div style="background-color: #1e222a; padding: 10px; border-radius: 8px; border: 1px solid #262730;">
                 <div style="font-size: 11px; color: #888; text-transform: uppercase;">Velocità</div>
                 <div id="speedVal" style="font-size: 22px; font-weight: bold; margin-top: 4px; color: #4CAF50;">0.0 km/h</div>
             </div>
             <div style="background-color: #1e222a; padding: 10px; border-radius: 8px; border: 1px solid #262730;">
-                <div style="font-size: 11px; color: #888; text-transform: uppercase;">Pendenza</div>
+                <div style="font-size: 11px; color: #888; text-transform: uppercase;">Pendenza Stabile</div>
                 <div id="gradeVal" style="font-size: 22px; font-weight: bold; margin-top: 4px; color: #FF9800;">0.0 %</div>
             </div>
             <div style="background-color: #1e222a; padding: 10px; border-radius: 8px; border: 1px solid #262730;">
@@ -82,26 +85,16 @@ with col2:
     <script>
     const pesoTotale = {peso_totale};
     const cda = {cda};
+    const isTestMode = {str(test_mode).lower()};
+    const simSpeedVal = {sim_speed};
+    const simGradeVal = {sim_grade};
     
     let lastLat = null, lastLon = null, lastAlt = null, lastTime = null;
-    let smoothSpeed = 0, smoothGrade = 0, smoothWatt = 0;
+    let smoothSpeed = 0, stableGrade = 0, smoothWatt = 0;
     let windSpeedKmh = 0, windDirDeg = 0, bikeHeadingDeg = 0;
 
-    async function fetchWindData(lat, lon) {{
-        try {{
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${{lat}}&longitude=${{lon}}&current_weather=true`;
-            const res = await fetch(url);
-            const data = await res.json();
-            if (data.current_weather) {{
-                windSpeedKmh = data.current_weather.windspeed;
-                windDirDeg = data.current_weather.winddirection;
-                document.getElementById('windVal').innerText = windSpeedKmh.toFixed(1) + " km/h";
-            }}
-        }} catch(e) {{ console.log("Meteo Err:", e); }}
-    }}
-
     function calcolaWatt(vKmh, gradePct, effWindKmh) {{
-        if (vKmh < 1.8) return 0;
+        if (vKmh < 2.0) return 0;
         
         const g = 9.81, rho = 1.225, eta = 0.95, crr = 0.004;
         const vMs = vKmh / 3.6;
@@ -115,16 +108,25 @@ with col2:
         return Math.max(0, Math.round((pGravita + pAria + pRotolamento) / eta));
     }}
 
+    if (isTestMode) {{
+        document.getElementById('speedVal').innerText = simSpeedVal.toFixed(1) + " km/h";
+        document.getElementById('gradeVal').innerText = simGradeVal.toFixed(1) + " %";
+        let w = calcolaWatt(simSpeedVal, simGradeVal, 0);
+        document.getElementById('wattVal').innerText = w + " W";
+    }}
+
     document.getElementById('startSensors').addEventListener('click', () => {{
-        if ("geolocation" in navigator) {{
+        if ("geolocation" in navigator && !isTestMode) {{
             navigator.geolocation.watchPosition((pos) => {{
                 let now = Date.now();
                 let rawSpd = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
 
-                if (rawSpd < 1.8) {{
+                // Deadband per azzerare la velocità sotto i 2.0 km/h
+                if (rawSpd < 2.0) {{
                     smoothSpeed = 0;
+                    stableGrade = 0;
                 }} else {{
-                    smoothSpeed = (smoothSpeed * 0.6) + (rawSpd * 0.4);
+                    smoothSpeed = (smoothSpeed * 0.7) + (rawSpd * 0.3);
                 }}
 
                 document.getElementById('speedVal').innerText = smoothSpeed.toFixed(1) + " km/h";
@@ -133,40 +135,41 @@ with col2:
                 const lon = pos.coords.longitude;
                 const alt = pos.coords.altitude;
 
-                if (!lastLat || getDistance(lastLat, lastLon, lat, lon) > 500) {{
-                    fetchWindData(lat, lon);
-                }}
-
-                if (pos.coords.heading !== null && !isNaN(pos.coords.heading)) {{
-                    bikeHeadingDeg = pos.coords.heading;
-                }}
-
-                let angleRad = (windDirDeg - bikeHeadingDeg) * (Math.PI / 180);
-                let effWind = (smoothSpeed > 0) ? (windSpeedKmh * Math.cos(angleRad)) : 0;
-                document.getElementById('effWindVal').innerText = (effWind > 0 ? "+" : "") + effWind.toFixed(1) + " km/h";
-
-                if (smoothSpeed >= 1.8 && alt !== null && lastLat !== null && lastTime !== null) {{
+                // ALGORITMO PENDENZA STABILE (FINANDRA DI DISTANZA MINIMA 15m)
+                if (smoothSpeed >= 2.0 && alt !== null && lastLat !== null && lastTime !== null) {{
                     let dt = (now - lastTime) / 1000.0;
                     let dist = getDistance(lastLat, lastLon, lat, lon);
 
-                    if (dt >= 1.5 && dist >= 6.0) {{
+                    // Calcola la pendenza solo se sono stati percorsi almeno 15 metri effettivi
+                    if (dist >= 15.0 && dt >= 2.0) {{
                         let rawGrade = ((alt - lastAlt) / dist) * 100;
-                        if (rawGrade <= 25.0 && rawGrade >= -20.0) {{
-                            smoothGrade = (smoothGrade * 0.75) + (rawGrade * 0.25);
+                        
+                        // Ignora letture assurde
+                        if (rawGrade <= 22.0 && rawGrade >= -18.0) {{
+                            // Smussamento ultra-progressivo (Max variazione limitata)
+                            let targetGrade = (stableGrade * 0.8) + (rawGrade * 0.2);
+                            
+                            // Limita il cambio massimo di pendenza a 0.5% per secondo per eliminare gli sbalzi
+                            let maxChange = 0.5 * dt;
+                            if (Math.abs(targetGrade - stableGrade) > maxChange) {{
+                                stableGrade += (targetGrade > stableGrade ? maxChange : -maxChange);
+                            }} else {{
+                                stableGrade = targetGrade;
+                            }}
                         }}
                         lastLat = lat; lastLon = lon; lastAlt = alt; lastTime = now;
                     }}
-                }} else if (smoothSpeed < 1.8) {{
-                    smoothGrade = 0;
+                }} else if (smoothSpeed < 2.0) {{
+                    stableGrade = 0;
                     if (alt !== null) {{ lastLat = lat; lastLon = lon; lastAlt = alt; lastTime = now; }}
                 }} else if (alt !== null) {{
                     lastLat = lat; lastLon = lon; lastAlt = alt; lastTime = now;
                 }}
 
-                document.getElementById('gradeVal').innerText = smoothGrade.toFixed(1) + " %";
+                document.getElementById('gradeVal').innerText = stableGrade.toFixed(1) + " %";
 
-                let targetWatt = calcolaWatt(smoothSpeed, smoothGrade, effWind);
-                smoothWatt = Math.round((smoothWatt * 0.7) + (targetWatt * 0.3));
+                let targetWatt = calcolaWatt(smoothSpeed, stableGrade, 0);
+                smoothWatt = Math.round((smoothWatt * 0.8) + (targetWatt * 0.2));
 
                 document.getElementById('wattVal').innerText = smoothWatt + " W";
 
